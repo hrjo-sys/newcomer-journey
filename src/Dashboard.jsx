@@ -35,6 +35,14 @@ function pct(week) {
 
 const STAGE_COLORS = ["#3355FF", "#8B5CF6", "#F5A623", "#16A34A", "#EF4444", "#0EA5E9", "#EC4899"];
 
+// Journey 모아보기에서 보여줄 활동 카테고리 탭. key는 journeyNotes 객체의 키(=스테이지 이름)와 일치해야
+// Journey 보기 모달에서 입력한 내용이 여기 그대로 반영됨. 새 Journey 자료 탭이 필요하면 여기에 한 줄만 추가하면 됨.
+const OVERVIEW_LOG_TABS = [
+  { key: "버디 프로그램", label: "버디 프로그램" },
+  { key: "중간면담", label: "중간면담 자료" },
+  { key: "수습평가", label: "수습평가 자료" },
+];
+
 const initialStages = [
   { id: 1, order: 1, name: "입사당일", startWeek: 0, endWeek: 0, color: STAGE_COLORS[0] },
   { id: 2, order: 2, name: "버디 프로그램", startWeek: 0, endWeek: 3, color: STAGE_COLORS[1] },
@@ -45,9 +53,14 @@ const initialStages = [
 
 const initialEmployees = [
   { id: 1, empNo: "24091", name: "정유진", gender: "여", phone: "010-2231-9081", birth: "1997.03.12", email: "yjjeong@drygo.co.kr", personalEmail: "yj.jeong97@naver.com", org: "HR실", title: "사원", position: "HR Operations", hireDate: daysAgo(0), career: "신입", extra: [] },
-  { id: 2, empNo: "24088", name: "최민준", gender: "남", phone: "010-5521-3390", birth: "1995.11.02", email: "mjchoi@drygo.co.kr", personalEmail: "minjun.c@gmail.com", org: "마케팅실", title: "주임", position: "퍼포먼스 마케팅", hireDate: daysAgo(10), career: "2년", extra: [] },
+  { id: 2, empNo: "24088", name: "최민준", gender: "남", phone: "010-5521-3390", birth: "1995.11.02", email: "mjchoi@drygo.co.kr", personalEmail: "minjun.c@gmail.com", org: "마케팅실", title: "주임", position: "퍼포먼스 마케팅", hireDate: daysAgo(10), career: "2년", extra: [],
+    // journeyDates는 <input type="date"> 규격에 맞춰 "YYYY-MM-DD" 형식으로 저장
+    journeyDates: { "버디 프로그램": { start: "2026-06-27", end: "" } },
+    journeyNotes: { "버디 프로그램": "버디 김하늘님과 주 2회 미팅 진행 중. 사내 툴 온보딩 완료." } },
   { id: 3, empNo: "24081", name: "박서연", gender: "여", phone: "010-7742-6650", birth: "1998.06.21", email: "sypark@drygo.co.kr", personalEmail: "seoyeon.park@naver.com", org: "CS실", title: "사원", position: "CX 운영", hireDate: daysAgo(25), career: "신입", extra: [] },
-  { id: 4, empNo: "24074", name: "오지훈", gender: "남", phone: "010-3312-8871", birth: "1993.01.30", email: "jhoh@drygo.co.kr", personalEmail: "jihoon.oh@daum.net", org: "물류기획실", title: "대리", position: "물류 기획", hireDate: daysAgo(45), career: "4년", extra: [] },
+  { id: 4, empNo: "24074", name: "오지훈", gender: "남", phone: "010-3312-8871", birth: "1993.01.30", email: "jhoh@drygo.co.kr", personalEmail: "jihoon.oh@daum.net", org: "물류기획실", title: "대리", position: "물류 기획", hireDate: daysAgo(45), career: "4년", extra: [],
+    journeyDates: { "버디 프로그램": { start: "2026-05-25", end: "2026-06-15" }, "중간면담": { start: "2026-06-22", end: "2026-06-22" } },
+    journeyNotes: { "버디 프로그램": "물류 기획실 현업 프로세스 위주로 진행. 이상 없음.", "중간면담": "적응 양호, 업무 강도에 대한 피드백 있었음 — 다음 스프린트 반영 예정." } },
   { id: 5, empNo: "24069", name: "이도윤", gender: "남", phone: "010-9981-2214", birth: "1996.09.09", email: "dyleee@drygo.co.kr", personalEmail: "doyoon.lee@gmail.com", org: "개발실", title: "사원", position: "백엔드 개발", hireDate: daysAgo(60), career: "1년", extra: [] },
   { id: 6, empNo: "24052", name: "김하늘", gender: "여", phone: "010-1123-4499", birth: "1994.04.18", email: "hnkim@drygo.co.kr", personalEmail: "haneul.kim@naver.com", org: "재무실", title: "주임", position: "재무 회계", hireDate: daysAgo(95), career: "3년", extra: [], result: "합격" },
 ];
@@ -73,6 +86,9 @@ function normalizeEmployee(e, idx) {
     buddyEmail: e.buddyEmail || "",
     extra: Array.isArray(e.extra) ? e.extra : [],
     result: e.result || "",
+    // 스테이지별 실제 시작~종료일과 활동 내용. n8n이 아직 이 필드를 안 내려주므로 항상 빈 객체로 시작.
+    journeyDates: e.journeyDates || {},
+    journeyNotes: e.journeyNotes || {},
   };
 }
 
@@ -383,23 +399,76 @@ function EmployeeDetailModal({ emp, onClose, onOpenJourneyLog, onEdit, isAdmin }
   );
 }
 
-function JourneyLogModal({ emp, onClose }) {
+function JourneyLogModal({ emp, journeyStages, onUpdateDate, onUpdateNote, onClose }) {
   return (
-    <Modal onClose={onClose} width={520}>
+    <Modal onClose={onClose} width={680}>
       <div className="px-6 py-5 border-b flex items-center justify-between" style={{ borderColor: "var(--line)" }}>
         <h2 className="font-display text-lg font-semibold">{emp?.name}님의 Journey 보기</h2>
         <button onClick={onClose}><X size={18} /></button>
       </div>
       <div className="p-6">
-        <div className="rounded-xl border py-14 text-center text-sm" style={{ borderColor: "var(--line)", color: "var(--ink-muted)" }}>
-          버디 프로그램 활동 내역, 중간면담·수습평가 자료 등록 화면은<br />상세 레이아웃 전달 후 구현 예정입니다.
+        <div className="grid grid-cols-12 gap-3 text-xs font-medium pb-2 mb-2 border-b" style={{ color: "var(--ink-muted)", borderColor: "var(--line)" }}>
+          <div className="col-span-3">Journey</div>
+          <div className="col-span-3">기간</div>
+          <div className="col-span-6">내용</div>
         </div>
+        <div className="flex flex-col gap-3">
+          {journeyStages.map((s) => {
+            const isResult = s.name === "수습평가";
+            const dates = emp.journeyDates?.[s.name] || { start: "", end: "" };
+            const note = emp.journeyNotes?.[s.name] || "";
+            return (
+              <div key={s.id} className="grid grid-cols-12 gap-3 items-start">
+                <div className="col-span-3 flex items-center gap-2 pt-2">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: s.color }} />
+                  <span className="text-sm font-medium">{s.name}</span>
+                </div>
+                <div className="col-span-3 flex flex-col gap-1.5">
+                  <input
+                    type="date"
+                    className="field-input text-xs"
+                    value={dates.start}
+                    onChange={(e) => onUpdateDate(emp.id, s.name, "start", e.target.value)}
+                  />
+                  <input
+                    type="date"
+                    className="field-input text-xs"
+                    value={dates.end}
+                    onChange={(e) => onUpdateDate(emp.id, s.name, "end", e.target.value)}
+                  />
+                </div>
+                <div className="col-span-6">
+                  {isResult ? (
+                    <div className="rounded-lg px-3 py-2 text-xs h-full flex items-center" style={{ background: "var(--bg)", color: "var(--ink-muted)" }}>
+                      수습평가 결과는 Result 화면에서 입력합니다
+                    </div>
+                  ) : (
+                    <textarea
+                      className="field-input text-sm"
+                      style={{ resize: "vertical", minHeight: 64 }}
+                      placeholder={`${s.name} 활동 내용을 입력하세요`}
+                      value={note}
+                      onChange={(e) => onUpdateNote(emp.id, s.name, e.target.value)}
+                    />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="px-6 py-4 border-t flex justify-end" style={{ borderColor: "var(--line)" }}>
+        <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ background: "var(--primary)" }}>완료</button>
       </div>
     </Modal>
   );
 }
 
 function JourneyOverviewScreen({ employees, onBack }) {
+  const [activeTab, setActiveTab] = useState(OVERVIEW_LOG_TABS[0].key);
+  const activeLabel = OVERVIEW_LOG_TABS.find((t) => t.key === activeTab)?.label || "";
+  const sorted = [...employees].sort((a, b) => b.hireDate - a.hireDate); // 입사일 최신순
+
   return (
     <div className="px-8 py-8">
       <button onClick={onBack} className="flex items-center gap-1 text-sm mb-6" style={{ color: "var(--ink-muted)" }}>
@@ -407,24 +476,55 @@ function JourneyOverviewScreen({ employees, onBack }) {
       </button>
       <h2 className="font-display text-xl font-semibold mb-1">Journey 모아보기</h2>
       <p className="text-sm mb-6" style={{ color: "var(--ink-muted)" }}>
-        버디 프로그램 활동 내역 · 중간면담 자료 · 수습평가 자료를 중심으로 입사자 데이터를 한눈에 봅니다.
+        탭을 눌러 Journey 단계별 자료를 입사일 최신순으로 모아봅니다.
       </p>
-      <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--line)" }}>
-        <div className="grid grid-cols-4 px-4 py-3 text-xs font-medium" style={{ background: "var(--bg)", color: "var(--ink-muted)" }}>
-          <div>이름</div><div>버디 프로그램 활동 내역</div><div>중간면담 자료</div><div>수습평가 자료</div>
-        </div>
-        {employees.map((e) => (
-          <div key={e.id} className="grid grid-cols-4 px-4 py-3 text-sm border-t items-center" style={{ borderColor: "var(--line)" }}>
-            <div className="font-medium">{e.name}</div>
-            <div className="text-xs" style={{ color: "var(--ink-muted)" }}>등록 예정</div>
-            <div className="text-xs" style={{ color: "var(--ink-muted)" }}>등록 예정</div>
-            <div className="text-xs" style={{ color: "var(--ink-muted)" }}>등록 예정</div>
-          </div>
+
+      <div className="flex items-center gap-1 mb-6 border-b" style={{ borderColor: "var(--line)" }}>
+        {OVERVIEW_LOG_TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setActiveTab(t.key)}
+            className="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px"
+            style={{
+              borderColor: activeTab === t.key ? "var(--primary)" : "transparent",
+              color: activeTab === t.key ? "var(--primary)" : "var(--ink-muted)",
+            }}
+          >
+            {t.label}
+          </button>
         ))}
       </div>
-      <p className="text-xs mt-3" style={{ color: "var(--ink-muted)" }}>
-        상단 바의 각 Journey를 눌러 해당 단계를 거쳐간 입사자 데이터를 모아보는 방식은 추후 별도 업데이트될 예정입니다.
-      </p>
+
+      <div className="flex flex-col gap-3">
+        {sorted.map((e) => {
+          const note = e.journeyNotes?.[activeTab] || "";
+          const dates = e.journeyDates?.[activeTab];
+          return (
+            <div key={e.id} className="rounded-xl border p-4" style={{ borderColor: "var(--line)" }}>
+              <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-display text-sm font-semibold">{e.name}</span>
+                  <span className="text-xs" style={{ color: "var(--ink-muted)" }}>{e.org}</span>
+                </div>
+                <div className="flex items-center gap-2 font-mono text-xs" style={{ color: "var(--ink-muted)" }}>
+                  {dates?.start && <span>{dates.start} ~ {dates.end || "진행중"}</span>}
+                  <span>입사 {fmtDate(e.hireDate)}</span>
+                </div>
+              </div>
+              {note ? (
+                <p className="text-sm whitespace-pre-wrap leading-relaxed">{note}</p>
+              ) : (
+                <p className="text-xs" style={{ color: "var(--ink-muted)" }}>아직 등록된 {activeLabel} 내용이 없습니다.</p>
+              )}
+            </div>
+          );
+        })}
+        {sorted.length === 0 && (
+          <div className="rounded-xl border py-16 text-center text-sm" style={{ borderColor: "var(--line)", color: "var(--ink-muted)" }}>
+            아직 등록된 입사자가 없습니다.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -487,7 +587,7 @@ export default function Dashboard({ role, userEmail, userName, onLogout, remoteE
   const [showJourney, setShowJourney] = useState(false);
   const [showFinished, setShowFinished] = useState(false);
   const [selected, setSelected] = useState(null);
-  const [journeyLogEmp, setJourneyLogEmp] = useState(null);
+  const [journeyLogEmpId, setJourneyLogEmpId] = useState(null);
   const [toast, setToast] = useState("");
 
   function showToast(msg) {
@@ -509,6 +609,27 @@ export default function Dashboard({ role, userEmail, userName, onLogout, remoteE
 
   function addCustomFieldDef(label) {
     setCustomFieldDefs((prev) => (prev.some((f) => f.label === label) ? prev : [...prev, { label }]));
+  }
+
+  function updateJourneyNote(empId, stageName, text) {
+    setEmployees((prev) =>
+      prev.map((e) => (e.id === empId ? { ...e, journeyNotes: { ...(e.journeyNotes || {}), [stageName]: text } } : e))
+    );
+  }
+  function updateJourneyDate(empId, stageName, field, value) {
+    setEmployees((prev) =>
+      prev.map((e) =>
+        e.id === empId
+          ? {
+              ...e,
+              journeyDates: {
+                ...(e.journeyDates || {}),
+                [stageName]: { ...(e.journeyDates?.[stageName] || { start: "", end: "" }), [field]: value },
+              },
+            }
+          : e
+      )
+    );
   }
 
   function updateStage(id, patch) {
@@ -546,6 +667,9 @@ export default function Dashboard({ role, userEmail, userName, onLogout, remoteE
   }
 
   const sortedStages = [...stages].sort((a, b) => a.order - b.order);
+  // Journey 보기 모달에 노출할 스테이지. "입사당일"은 하루짜리 체크포인트라 활동 기록 대상에서 제외.
+  const journeyLogStages = sortedStages.filter((s) => s.name !== "입사당일");
+  const journeyLogEmp = employees.find((e) => e.id === journeyLogEmpId) || null;
   const inProgress = employees.filter((e) => elapsedWeeks(e.hireDate) < TOTAL_WEEKS);
   const finished = employees
     .filter((e) => elapsedWeeks(e.hireDate) >= TOTAL_WEEKS)
@@ -764,12 +888,20 @@ export default function Dashboard({ role, userEmail, userName, onLogout, remoteE
         <EmployeeDetailModal
           emp={selected}
           onClose={() => setSelected(null)}
-          onOpenJourneyLog={(e) => { setSelected(null); setJourneyLogEmp(e); }}
+          onOpenJourneyLog={(e) => { setSelected(null); setJourneyLogEmpId(e.id); }}
           onEdit={(e) => { setSelected(null); setEditEmp(e); }}
           isAdmin={isAdmin}
         />
       )}
-      {journeyLogEmp && <JourneyLogModal emp={journeyLogEmp} onClose={() => setJourneyLogEmp(null)} />}
+      {journeyLogEmp && (
+        <JourneyLogModal
+          emp={journeyLogEmp}
+          journeyStages={journeyLogStages}
+          onUpdateDate={updateJourneyDate}
+          onUpdateNote={updateJourneyNote}
+          onClose={() => setJourneyLogEmpId(null)}
+        />
+      )}
 
       {toast && (
         <div
